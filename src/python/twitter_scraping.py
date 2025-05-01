@@ -32,7 +32,7 @@ def scrape_all_tweet_texts(url: str, max_scrolls: int = 5):
         page = context.new_page()
 
         try:
-            print(f"Navigating to {url}...")
+            # print(f"Navigating to {url}...")
             page.goto(url, wait_until='networkidle', timeout=60000)
             print("Page loaded. Waiting for initial tweets...")
 
@@ -89,11 +89,31 @@ def scrape_all_tweet_texts(url: str, max_scrolls: int = 5):
 
     return all_tweet_entries
 
+def transform_post_time(post_time, scrape_time):
+    # hour
+    if 'h' in post_time:
+        hour = int(post_time[:-1])
+        return scrape_time - pd.Timedelta(hours=hour)
+    if 'm' in post_time:
+        minute = int(post_time[:-1])
+        return scrape_time - pd.Timedelta(minutes=minute)
+    if 's' in post_time:
+        second = int(post_time[:-1])
+        return scrape_time - pd.Timedelta(seconds=second)
+    
+    try:
+        current_year = scrape_time.year
+        post_time = f"{current_year} {post_time}"
+        return pd.to_datetime(post_time, format='%Y %b %d')
+    except ValueError:
+        print("error",post_time)
+        return pd.NaT
+    
 def scrape_tag(tag:str) -> pd.DataFrame:
     encoded = urllib.parse.quote(tag, safe='')
-    target_url = f"https://x.com/search?q={encoded}&src=typeahead_click&f=top"
+    target_url = f"https://x.com/search?q={encoded}&src=typeahead_click&f=live"
     
-    print(f"Starting scrape for URL: {target_url}")
+    # print(f"Starting scrape for URL: {target_url}")
     tweet_data = scrape_all_tweet_texts(target_url, max_scrolls=1)
 
 
@@ -105,15 +125,19 @@ def scrape_tag(tag:str) -> pd.DataFrame:
         print("No tweet texts were scraped.")
         
     tweet_df = pd.DataFrame(tweet_data)
-    tweet_df['scrapeTime'] = datetime.now().strftime("%Y-%m-%d_%H-%M")
+    tweet_df['scrapeTime'] = datetime.now()
+    
     clean_tag = lambda x: re.sub(r'[^a-zA-Z0-9ก-๙]', '', x)
     tweet_df['tag'] = tag
     tweet_df['tag'] = tweet_df['tag'].apply(clean_tag)
-
+    
+    tweet_df['postTimeRaw'] = tweet_df['username'].str.split("·").str[-1]
+    tweet_df['postTime'] = tweet_df.apply(lambda x: transform_post_time(x['postTimeRaw'], x['scrapeTime']), axis=1)
+    scrape_time = datetime.now().strftime('%Y-%m-%d_%H-%M')
     # tweet_df['scrapeTime'] = pd.to_datetime(tweet_df['scrapeTime']).dt.strftime('%Y-%m-%d_%H-%M')
     for (tag_val, scrape_time_val), group in tweet_df.groupby(['tag', 'scrapeTime']):
         # Make human-readable folder name
-        subdir = os.path.join(data_dir, f"tag={tag_val}", f"scrapeTime={scrape_time_val}")
+        subdir = os.path.join(data_dir, f"tag={tag_val}", f"scrapeTime={scrape_time}")
         os.makedirs(subdir, exist_ok=True)
         
         # Save each group (e.g., part-1.parquet)
