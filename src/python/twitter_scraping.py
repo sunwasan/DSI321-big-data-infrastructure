@@ -84,7 +84,8 @@ def scrape_all_tweet_texts(url: str, max_scrolls: int = 5):
 
 
 if __name__ == "__main__":
-    target_url = "https://x.com/hashtag/DSI321?src=hashtag_click"
+    # target_url = "https://x.com/search?q=%23DSI321&src=typed_query&f=live"
+    target_url = "https://x.com/search?q=%23%E0%B8%98%E0%B8%A3%E0%B8%A3%E0%B8%A1%E0%B8%A8%E0%B8%B2%E0%B8%AA%E0%B8%95%E0%B8%A3%E0%B9%8C%E0%B8%8A%E0%B9%89%E0%B8%B2%E0%B8%87%E0%B9%80%E0%B8%9C%E0%B8%B7%E0%B8%AD%E0%B8%81&src=typeahead_click&f=live"
     print(f"Starting scrape for URL: {target_url}")
     tweet_data = scrape_all_tweet_texts(target_url, max_scrolls=10)
 
