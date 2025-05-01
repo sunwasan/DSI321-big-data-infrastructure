@@ -4,6 +4,13 @@ from pprint import pprint
 import json
 import os
 from datetime import datetime  # <-- NEW IMPORT
+from pathlib import Path
+import pandas as pd
+import re
+import urllib.parse
+
+file_dir = Path(__file__).resolve().parent
+data_dir = file_dir/ ".." / "data"
 
 def scrape_all_tweet_texts(url: str, max_scrolls: int = 5):
     """
@@ -82,12 +89,13 @@ def scrape_all_tweet_texts(url: str, max_scrolls: int = 5):
 
     return all_tweet_entries
 
-
-if __name__ == "__main__":
-    # target_url = "https://x.com/search?q=%23DSI321&src=typed_query&f=live"
-    target_url = "https://x.com/search?q=%23%E0%B8%98%E0%B8%A3%E0%B8%A3%E0%B8%A1%E0%B8%A8%E0%B8%B2%E0%B8%AA%E0%B8%95%E0%B8%A3%E0%B9%8C%E0%B8%8A%E0%B9%89%E0%B8%B2%E0%B8%87%E0%B9%80%E0%B8%9C%E0%B8%B7%E0%B8%AD%E0%B8%81&src=typeahead_click&f=live"
+def scrape_tag(tag:str) -> pd.DataFrame:
+    encoded = urllib.parse.quote(tag, safe='')
+    target_url = f"https://x.com/search?q={encoded}&src=typeahead_click&f=top"
+    
     print(f"Starting scrape for URL: {target_url}")
-    tweet_data = scrape_all_tweet_texts(target_url, max_scrolls=10)
+    tweet_data = scrape_all_tweet_texts(target_url, max_scrolls=1)
+
 
     print("\n--- Scraped Tweet Data ---")
     if tweet_data:
@@ -95,7 +103,27 @@ if __name__ == "__main__":
         print(f"\nTotal unique tweet entries scraped: {len(tweet_data)}")
     else:
         print("No tweet texts were scraped.")
+        
+    tweet_df = pd.DataFrame(tweet_data)
+    tweet_df['scrapeTime'] = datetime.now().strftime("%Y-%m-%d_%H-%M")
+    clean_tag = lambda x: re.sub(r'[^a-zA-Z0-9ก-๙]', '', x)
+    tweet_df['tag'] = tag
+    tweet_df['tag'] = tweet_df['tag'].apply(clean_tag)
 
-    with open("scraped_tweets.json", "w", encoding="utf-8") as f:
-        json.dump(tweet_data, f, indent=4, ensure_ascii=False)
-    print("\nResults saved to scraped_tweets.json")
+    # tweet_df['scrapeTime'] = pd.to_datetime(tweet_df['scrapeTime']).dt.strftime('%Y-%m-%d_%H-%M')
+    for (tag_val, scrape_time_val), group in tweet_df.groupby(['tag', 'scrapeTime']):
+        # Make human-readable folder name
+        subdir = os.path.join(data_dir, f"tag={tag_val}", f"scrapeTime={scrape_time_val}")
+        os.makedirs(subdir, exist_ok=True)
+        
+        # Save each group (e.g., part-1.parquet)
+        group.to_parquet(os.path.join(subdir, 'part.parquet'), index=False, engine='pyarrow')
+
+    return tweet_df
+
+
+if __name__ == "__main__":
+    tag = "#ธรรมศาสตร์ช้างเผือก"
+    scrape_tag(tag)
+    
+
