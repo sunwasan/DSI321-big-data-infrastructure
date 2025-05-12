@@ -24,7 +24,8 @@ logger.addHandler(console_handler)
 
 file_dir = Path(__file__).resolve().parent
 data_dir = file_dir/ ".." / "data"
-
+tweet_dest_dir = data_dir / "tweets"
+os.makedirs(tweet_dest_dir, exist_ok=True)
 def scrape_all_tweet_texts(url: str, max_scrolls: int = 5):
     """
     Scrapes all tweet texts from a given Twitter URL by scrolling down.
@@ -160,20 +161,16 @@ def scrape_tag(tag:str, max_scrolls:int = 5) -> pd.DataFrame:
     tweet_df['postMonth'] = tweet_df['postTime'].dt.month
     tweet_df['postDay'] = tweet_df['postTime'].dt.day
     
+    tweet_tag_dest_dir = tweet_dest_dir / f"tag={tweet_df['tag'][0]}"
+    os.makedirs(tweet_tag_dest_dir, exist_ok=True)
+    tweet_df.to_parquet(tweet_tag_dest_dir, partition_cols=[ 'postYear', 'postMonth', 'postDay'], index=False, engine='pyarrow' ,existing_data_behavior='delete_matching')
     
-    tweet_df.to_parquet(os.path.join(data_dir), partition_cols=[ 'postYear', 'postMonth', 'postDay'], index=False, engine='pyarrow' ,existing_data_behavior='delete_matching')
-    
-    # scrape_time = datetime.now().strftime('%Y-%m-%d_%H-%M')
-    # for (tag_val, scrape_time_val), group in tweet_df.groupby(['tag', 'scrapeTime']):
-    #     subdir = os.path.join(data_dir, f"tag={tag_val}", f"scrapeTime={scrape_time}")
-    #     os.makedirs(subdir, exist_ok=True)
-    #     group.to_parquet(os.path.join(subdir, 'part.parquet'), index=False, engine='pyarrow')
 
     return tweet_df
 
 
 if __name__ == "__main__":
     tag = "#ธรรมศาสตร์ช้างเผือก"
-    scrape_tag(tag, 50)
+    scrape_tag(tag, 60)
     
 
