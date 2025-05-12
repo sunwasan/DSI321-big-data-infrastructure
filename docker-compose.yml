@@ -1,4 +1,7 @@
 services:
+
+  
+
   lakefsdev:
     image: treeverse/lakefs:1.7.0
     ports:
@@ -63,11 +66,29 @@ services:
       context: ./make
       dockerfile: Dockerfile.jupyter
     ports:
-      - "8888:8888"
+      - "8888:8888"    
     volumes:
       - ./src:/home/jovyan/src:rw
     environment:
       - PREFECT_API_URL=http://prefectserver:4200/api
+        
+  streamlit:
+    build:
+      context: ./src/frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./src:/src:ro
+      - ./src/data:/data:ro
+      - ./src/config:/src/config:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 
 volumes:
