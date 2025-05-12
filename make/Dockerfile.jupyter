@@ -19,4 +19,6 @@ WORKDIR /home/jovyan/src
 EXPOSE 8888
 
 # Run JupyterLab with no token and allow-root
+RUN playwright install --with-deps
 CMD ["jupyter", "lab", "--ip=0.0.0.0", "--NotebookApp.token=''", "--allow-root"]
+

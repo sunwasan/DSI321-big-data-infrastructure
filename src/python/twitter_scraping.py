@@ -8,6 +8,19 @@ from pathlib import Path
 import pandas as pd
 import re
 import urllib.parse
+import logging
+import re
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+
+log_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+console_handler.setFormatter(log_format)
+logger.addHandler(console_handler)
+
 
 file_dir = Path(__file__).resolve().parent
 data_dir = file_dir/ ".." / "data"
@@ -32,33 +45,33 @@ def scrape_all_tweet_texts(url: str, max_scrolls: int = 5):
         page = context.new_page()
 
         try:
-            # print(f"Navigating to {url}...")
+            # logger.info(f"Navigating to {url}...")
             page.goto(url, wait_until='networkidle', timeout=60000)
-            print("Page loaded. Waiting for initial tweets...")
+            logger.info("Page loaded. Waiting for initial tweets...")
 
             try:
                 page.wait_for_selector("[data-testid='tweet']", timeout=30000)
-                print("Initial tweets found.")
+                logger.info("Initial tweets found.")
             except Exception as e:
-                print(f"Could not find initial tweets: {e}")
+                logger.info(f"Could not find initial tweets: {e}")
                 try:
                     page.wait_for_selector("[data-testid='tweetText']", timeout=10000)
-                    print("Initial tweet text found.")
+                    logger.info("Initial tweet text found.")
                 except Exception as e2:
-                    print(f"Could not find initial tweet text either: {e2}")
+                    logger.error(f"Could not find initial tweet text either: {e2}")
                     page.screenshot(path="debug_screenshot_no_tweets.png")
                     return all_tweet_entries
 
-            print(f"Scrolling down {max_scrolls} times...")
+            logger.info(f"Scrolling down {max_scrolls} times...")
             last_height = page.evaluate("document.body.scrollHeight")
 
             for i in range(max_scrolls):
-                print(f"Scroll attempt {i+1}/{max_scrolls}")
+                logger.info(f"Scroll attempt {i+1}/{max_scrolls}")
                 page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                 time.sleep(3)
                 new_height = page.evaluate("document.body.scrollHeight")
                 if new_height == last_height:
-                    print("Reached bottom of page or no new content loaded.")
+                    logger.info("Reached bottom of page or no new content loaded.")
                     break
                 last_height = new_height
 
@@ -79,50 +92,60 @@ def scrape_all_tweet_texts(url: str, max_scrolls: int = 5):
                                 "scrapeTime": now.isoformat()
                             })
 
-                print(f"Total tweets collected so far: {len(all_tweet_entries)}")
+                logger.info(f"Total tweets collected so far: {len(all_tweet_entries)}")
 
         except Exception as e:
-            print(f"An error occurred during scraping: {e}")
+            logger.error(f"An error occurred during scraping: {e}")
         finally:
-            print("Closing browser.")
+            logger.info("Closing browser.")
             browser.close()
 
     return all_tweet_entries
 
 def transform_post_time(post_time, scrape_time):
-    # hour
-    if 'h' in post_time:
-        hour = int(post_time[:-1])
-        return scrape_time - pd.Timedelta(hours=hour)
-    if 'm' in post_time:
-        minute = int(post_time[:-1])
-        return scrape_time - pd.Timedelta(minutes=minute)
-    if 's' in post_time:
-        second = int(post_time[:-1])
-        return scrape_time - pd.Timedelta(seconds=second)
-    
     try:
-        current_year = scrape_time.year
-        post_time = f"{current_year} {post_time}"
-        return pd.to_datetime(post_time, format='%Y %b %d')
-    except ValueError:
-        print("error",post_time)
+        twitter_full_time_format = "%b %d, %Y"
+        post_time_dt = pd.to_datetime(post_time, format=twitter_full_time_format, errors='coerce')
+        
+        if post_time_dt is not pd.NaT:
+            pass
+        elif 'h' in post_time:
+            hour = int(post_time[:-1])
+            post_time_dt =  scrape_time - pd.Timedelta(hours=hour)
+        elif 'm' in post_time:
+            minute = int(post_time[:-1])
+            post_time_dt = scrape_time - pd.Timedelta(minutes=minute)
+        elif 's' in post_time:
+            second = int(post_time[:-1])
+            post_time_dt = scrape_time - pd.Timedelta(seconds=second)
+        else:
+            current_year = scrape_time.year
+            post_time = f"{current_year} {post_time}"
+            post_time_dt = pd.to_datetime(post_time, format='%Y %b %d')
+
+        if post_time_dt > pd.Timestamp.now():
+            post_time_dt = post_time_dt - pd.DateOffset(years=1)
+        return post_time_dt
+    except Exception as e:
+        logger.error(f"Error transforming post time: {e}")
         return pd.NaT
+      
+
     
-def scrape_tag(tag:str) -> pd.DataFrame:
+    
+def scrape_tag(tag:str, max_scrolls:int = 5) -> pd.DataFrame:
     encoded = urllib.parse.quote(tag, safe='')
     target_url = f"https://x.com/search?q={encoded}&src=typeahead_click&f=live"
     
-    # print(f"Starting scrape for URL: {target_url}")
-    tweet_data = scrape_all_tweet_texts(target_url, max_scrolls=1)
+    tweet_data = scrape_all_tweet_texts(target_url, max_scrolls=max_scrolls)
 
 
-    print("\n--- Scraped Tweet Data ---")
+    logger.info("\n--- Scraped Tweet Data ---")
     if tweet_data:
         pprint(tweet_data)
-        print(f"\nTotal unique tweet entries scraped: {len(tweet_data)}")
+        logger.info(f"\nTotal unique tweet entries scraped: {len(tweet_data)}")
     else:
-        print("No tweet texts were scraped.")
+        logger.info("No tweet texts were scraped.")
         
     tweet_df = pd.DataFrame(tweet_data)
     tweet_df['scrapeTime'] = datetime.now()
@@ -133,21 +156,24 @@ def scrape_tag(tag:str) -> pd.DataFrame:
     
     tweet_df['postTimeRaw'] = tweet_df['username'].str.split("·").str[-1]
     tweet_df['postTime'] = tweet_df.apply(lambda x: transform_post_time(x['postTimeRaw'], x['scrapeTime']), axis=1)
-    scrape_time = datetime.now().strftime('%Y-%m-%d_%H-%M')
-    # tweet_df['scrapeTime'] = pd.to_datetime(tweet_df['scrapeTime']).dt.strftime('%Y-%m-%d_%H-%M')
-    for (tag_val, scrape_time_val), group in tweet_df.groupby(['tag', 'scrapeTime']):
-        # Make human-readable folder name
-        subdir = os.path.join(data_dir, f"tag={tag_val}", f"scrapeTime={scrape_time}")
-        os.makedirs(subdir, exist_ok=True)
-        
-        # Save each group (e.g., part-1.parquet)
-        group.to_parquet(os.path.join(subdir, 'part.parquet'), index=False, engine='pyarrow')
+    tweet_df['postYear'] = tweet_df['postTime'].dt.year
+    tweet_df['postMonth'] = tweet_df['postTime'].dt.month
+    tweet_df['postDay'] = tweet_df['postTime'].dt.day
+    
+    
+    tweet_df.to_parquet(os.path.join(data_dir), partition_cols=[ 'postYear', 'postMonth', 'postDay'], index=False, engine='pyarrow' ,existing_data_behavior='delete_matching')
+    
+    # scrape_time = datetime.now().strftime('%Y-%m-%d_%H-%M')
+    # for (tag_val, scrape_time_val), group in tweet_df.groupby(['tag', 'scrapeTime']):
+    #     subdir = os.path.join(data_dir, f"tag={tag_val}", f"scrapeTime={scrape_time}")
+    #     os.makedirs(subdir, exist_ok=True)
+    #     group.to_parquet(os.path.join(subdir, 'part.parquet'), index=False, engine='pyarrow')
 
     return tweet_df
 
 
 if __name__ == "__main__":
     tag = "#ธรรมศาสตร์ช้างเผือก"
-    scrape_tag(tag)
+    scrape_tag(tag, 50)
     
 

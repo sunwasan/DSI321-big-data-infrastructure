@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "bs4>=0.0.2",
     "fsspec==2025.3.2",
+    "google-genai>=1.14.0",
     "ipykernel>=6.29.5",
     "kedro==0.19.11",
     "kedro-datasets==6.0.0",
@@ -16,8 +17,10 @@ dependencies = [
     "pandas==2.2.3",
     "playwright>=1.52.0",
     "plotly>=6.0.1",
+    "prefect>=3.4.1",
     "pyarrow==19.0.0",
     "requests==2.32.3",
     "s3fs==2025.3.2",
     "selenium>=4.31.0",
+    "wordcloud>=1.9.4",
 ]
