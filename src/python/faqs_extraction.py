@@ -7,6 +7,8 @@ from hashlib import sha256
 from dotenv import load_dotenv
 import os 
 from tqdm import tqdm
+import json
+import logging
 load_dotenv()
 
 GEMINI_API_KEY  = os.getenv("GEMINI_API_KEY")
@@ -29,7 +31,11 @@ issue_dir = data_dir / "issue"
 issue_dir.mkdir(parents=True, exist_ok=True)
 
 client = genai.Client(api_key=GEMINI_API_KEY)
-
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
 def hash_string(s):
     return sha256(s.encode()).hexdigest()
 
@@ -68,7 +74,7 @@ def save_processed_hashes(
 def load_tweets_df(
     tag:str,
     only_new : bool = True
-) -> pd.DataFrame: :
+) -> pd.DataFrame: 
     tweets_tag_dir = tweets_dir / f"tag={tag}"
     all_parquet = list(tweets_tag_dir.rglob("*.parquet"))
     
@@ -174,10 +180,10 @@ def extract_faqs(
     
     def topic_extraction(
         tweets_dicts: list,
-        faq_topic: str = faq_topic,
-        faq_subtopic: str = faq_subtopic,
-        issue_topic: str = issue_topic,
-        issue_subtopic: str = issue_subtopic
+        faq_topic: str,
+        faq_subtopic: str ,
+        issue_topic: str ,
+        issue_subtopic: str ,
         ) -> dict:
         
         prompt_formatted = prompt_template.format(
@@ -204,11 +210,16 @@ def extract_faqs(
     step = 50
     prev_stop = 0
     all_response = []
-    for ind in tqdm(range(step, len(df_dict) + step, step)):
+    issue_topic = set()
+    issue_subtopic = set()
+    faq_topic = set()
+    faq_subtopic = set()
+    
+    for ind in tqdm(range(step, len(tweets_dicts) + step, step)):
         start = prev_stop
         stop = ind
         prev_stop = stop
-        rows = df_dict[start:stop]
+        rows = tweets_dicts[start:stop]
         
         response = topic_extraction(rows)
         
@@ -237,7 +248,7 @@ def process(
         tag (str): The tag to identify the tweets.
         only_new (bool): Whether to process only new tweets. Default is True.
     """
-    tweets_df = load_tweets(tag, only_new)
+    tweets_df = load_tweets_df(tag, only_new)
     tweets_dicts = tweets_df[['postTime', 'tweetText', 'index']].to_dict(orient='records')
 
     if not tweets_dicts:
@@ -250,7 +261,7 @@ def process(
     faqs = [faq for response in all_response for faq in response['faq']  ]
     faqs_df = pd.DataFrame(faqs)
     faqs_df = faqs_df.merge(
-        df[['index', 'postTime']],
+        tweets_df[['index', 'postTime']],
         how='left',
         on='index'
     )
@@ -258,13 +269,13 @@ def process(
     issues = [issue for response in all_response for issue in response['issue']]
     issues_df = pd.DataFrame(issues)
     issues_df = issues_df.merge(
-        df[['index', 'postTime']],
+        tweets_df[['index', 'postTime']],
         how='left',
         on='index'
     )
     
-    faqs_dest = faq_dir / f"tag={tag}" / f"{today}.csv"
-    issues_dest = issue_dir / f"tag={tag}" / f"{today}.csv"
+    faqs_dest = faq_dir / f"tag={tag}" / f"faqs.csv"
+    issues_dest = issue_dir / f"tag={tag}" / f"issues.csv"
     
     append = os.path.exists(faqs_dest)
     faqs_df.to_csv(faqs_dest, mode='a', header=not append, index=False)

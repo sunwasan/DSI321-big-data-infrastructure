@@ -134,7 +134,7 @@ def transform_post_time(post_time, scrape_time):
 
     
     
-def scrape_tag(tag:str, max_scrolls:int = 5) -> pd.DataFrame:
+def scrape_tag(tag:str, max_scrolls:int = 1) -> pd.DataFrame:
     encoded = urllib.parse.quote(tag, safe='')
     target_url = f"https://x.com/search?q={encoded}&src=typeahead_click&f=live"
     
