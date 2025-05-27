@@ -44,7 +44,6 @@ import sys
 sys.path.append(str(file_dir))
 
 
-from pipeline.lakefs_load import to_tweets
 
 os.makedirs(tweet_dest_dir, exist_ok=True)
 def scrape_all_tweet_texts(url: str, max_scrolls: int = 5):
@@ -189,7 +188,6 @@ def scrape_tag(tag:str, max_scrolls:int = 1) -> pd.DataFrame:
     tweet_df['postMonth'] = tweet_df['postTime'].dt.month
     tweet_df['postDay'] = tweet_df['postTime'].dt.day
         
-    to_tweets(tweet_df)
     
     return tweet_df
 
