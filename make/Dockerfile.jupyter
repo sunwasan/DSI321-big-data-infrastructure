@@ -13,7 +13,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Set the working directory for notebooks
-WORKDIR /home/jovyan/src
+WORKDIR /home/jovyan/work
 
 # Expose JupyterLab port
 EXPOSE 8888

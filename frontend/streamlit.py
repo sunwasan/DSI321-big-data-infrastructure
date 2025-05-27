@@ -18,8 +18,9 @@ print(f"Detected Docker environment: {is_docker}")
 if is_docker:
     # Docker environment
     data_dir = Path("/data")
-    root_dir = Path("/src")
-    font_path = root_dir / "config" / "Sarabun-Regular.ttf"
+    config_dir = Path("/config")
+    font_path = config_dir / "Sarabun-Regular.ttf"
+    root_dir = Path(__file__).resolve().parent / ".."
     print("Using Docker paths")
 else:
     # Local environment
@@ -41,11 +42,7 @@ use_default_font = False
 if not os.path.exists(font_path):
     print(f"Font not found at {font_path}, looking for alternatives...")
     possible_font_paths = [
-        Path("/frontend") / "Sarabun-Regular.ttf",
-        Path("/src") / "config" / "Sarabun-Regular.ttf",
-        Path("/src") / "frontend" / "Sarabun-Regular.ttf",
-        Path(file_dir) / "Sarabun-Regular.ttf",
-        Path(os.getcwd()) / "Sarabun-Regular.ttf"
+        Path("config")  / "Sarabun-Regular.ttf",
     ]
     for path in possible_font_paths:
         if path.exists():
@@ -94,16 +91,16 @@ def load_faq_data(tag):
         st.warning(f"No data available for the selected tag. Path {faqs_dest} does not exist.")
         return None
 
-    faqs_files = list(faqs_dest.glob("*.csv"))
-    print(f"Found CSV files: {faqs_files}")
+    faqs_files = list(faqs_dest.glob("*.parquet"))
+    print(f"Found parquet files: {faqs_files}")
     
     if not faqs_files:
-        st.warning(f"No CSV files found in {faqs_dest}.")
+        st.warning(f"No parquet files found in {faqs_dest}.")
         return None
 
     latest_file = sorted(faqs_files, key=lambda x: x.name)[-1]
     print(f"Using latest file: {latest_file}")
-    return pd.read_csv(latest_file)
+    return pd.read_parquet(latest_file)
 
 def generate_word_cloud(text, stop_words, title):
     """Generate and display a word cloud."""
@@ -172,8 +169,9 @@ def generate_bar_chart(data, column, title, xlabel, ylabel):
 def main():
     st.title("FAQ Data Visualization")
    
-    
-    tag = st.selectbox("เลือก Tag", ("เลือก Tag", "ธรรมศาสตร์ช้างเผือก"))
+    tags = [t.split("=")[-1] for t in os.listdir(faq_dir)]
+    tags = set(['เลือก Tag'] + tags)
+    tag = st.selectbox("เลือก Tag", tags)
 
     if tag != "เลือก Tag":
         with st.spinner("กำลังโหลดข้อมูล..."):
@@ -190,24 +188,24 @@ def main():
 
             topics = faqs_df["topic"].dropna().tolist()
 
-            topics = [t for ele in topics for t in ele if t not in stop_words]
+            topics = [t for ele in topics for t in ele if not any(word in t for word in stop_words)]
             topics_text = " ".join(topics)
 
             # Process subtopics
-            faqs_df['subtopic'] = faqs_df['subtopic'].apply(lambda x: ast.literal_eval(x) if isinstance(x, str) else x)
-            subtopics = faqs_df["subtopic"].dropna().tolist()
-            subtopics = [s for ele in subtopics for s in ele if s not in stop_words]
-            subtopics_text = " ".join(subtopics)
+            # faqs_df['subtopic'] = faqs_df['subtopic'].apply(lambda x: ast.literal_eval(x) if isinstance(x, str) else x)
+            # subtopics = faqs_df["subtopic"].dropna().tolist()
+            # subtopics = [s for ele in subtopics for s in ele if s not in stop_words]
+            # subtopics_text = " ".join(subtopics)
 
             # Generate word clouds
             generate_word_cloud(topics_text, stop_words, "Word Cloud of FAQ Topics")
-            generate_word_cloud(subtopics_text, stop_words, "Word Cloud of FAQ Subtopics")
+            # generate_word_cloud(subtopics_text, stop_words, "Word Cloud of FAQ Subtopics")
 
             st.subheader("Bar Chart")
 
             # Generate bar charts
             generate_bar_chart(topics, "topic", "Top 10 FAQ Topics", "Count", "Topic")
-            generate_bar_chart(subtopics, "subtopic", "Top 10 FAQ Subtopics", "Count", "Subtopic")
+            # generate_bar_chart(subtopics, "subtopic", "Top 10 FAQ Subtopics", "Count", "Subtopic")
 
 if __name__ == "__main__":
     main()

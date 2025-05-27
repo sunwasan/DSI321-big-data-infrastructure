@@ -14,7 +14,7 @@ RUN pip3 install -r requirements.txt
 COPY . /frontend/
 
 # Create expected directories
-RUN mkdir -p /data /src/config
+RUN mkdir -p /data /config
 
 # Add debug script to help troubleshoot
 RUN echo '#!/bin/bash\necho "Listing directories:"\nls -la /\nls -la /data\nls -la /src\nls -la /frontend' > /frontend/debug.sh && \

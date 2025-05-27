@@ -1,3 +1,11 @@
+
+'''
+This script requires Playwright to be installed and set up.
+For docker volume mount, make sure to run the following command:
+- config
+- data
+'''
+
 from playwright.sync_api import sync_playwright
 import time
 from pprint import pprint
@@ -21,10 +29,23 @@ log_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messa
 console_handler.setFormatter(log_format)
 logger.addHandler(console_handler)
 
-
 file_dir = Path(__file__).resolve().parent
-data_dir = file_dir/ ".." / "data"
+
+if Path('data/').exists() and Path('config/').exists():
+    config_dir = Path('config/')
+    data_dir = Path('data/')
+else:
+    data_dir = file_dir/ ".." / "data"
+    config_dir = file_dir / ".." / "config"
+
 tweet_dest_dir = data_dir / "tweets"
+
+import sys 
+sys.path.append(str(file_dir))
+
+
+from pipeline.lakefs_load import to_tweets
+
 os.makedirs(tweet_dest_dir, exist_ok=True)
 def scrape_all_tweet_texts(url: str, max_scrolls: int = 5):
     """
@@ -42,7 +63,7 @@ def scrape_all_tweet_texts(url: str, max_scrolls: int = 5):
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        context = browser.new_context(storage_state="twitter_auth.json", viewport={"width": 1280, "height": 1024})
+        context = browser.new_context(storage_state=os.path.join(config_dir, "twitter_auth.json"), viewport={"width": 1280, "height": 1024})
         page = context.new_page()
 
         try:
@@ -146,7 +167,9 @@ def scrape_tag(tag:str, max_scrolls:int = 1) -> pd.DataFrame:
         pprint(tweet_data)
         logger.info(f"\nTotal unique tweet entries scraped: {len(tweet_data)}")
     else:
+        
         logger.info("No tweet texts were scraped.")
+        return
         
     tweet_df = pd.DataFrame(tweet_data)
     tweet_df['scrapeTime'] = datetime.now()
@@ -155,22 +178,25 @@ def scrape_tag(tag:str, max_scrolls:int = 1) -> pd.DataFrame:
     tweet_df['tag'] = tag
     tweet_df['tag'] = tweet_df['tag'].apply(clean_tag)
     
-    tweet_df['postTimeRaw'] = tweet_df['username'].str.split("·").str[-1]
+
+    userId = tweet_df['username'].str.split('·').str[0]
+    postTime = tweet_df['username'].str.split('·').str[-1]
+
+    tweet_df['postTimeRaw'] = postTime
+    tweet_df['username'] = userId
     tweet_df['postTime'] = tweet_df.apply(lambda x: transform_post_time(x['postTimeRaw'], x['scrapeTime']), axis=1)
     tweet_df['postYear'] = tweet_df['postTime'].dt.year
     tweet_df['postMonth'] = tweet_df['postTime'].dt.month
     tweet_df['postDay'] = tweet_df['postTime'].dt.day
+        
+    to_tweets(tweet_df)
     
-    tweet_tag_dest_dir = tweet_dest_dir / f"tag={tweet_df['tag'][0]}"
-    os.makedirs(tweet_tag_dest_dir, exist_ok=True)
-    tweet_df.to_parquet(tweet_tag_dest_dir, partition_cols=[ 'postYear', 'postMonth', 'postDay'], index=False, engine='pyarrow' ,existing_data_behavior='delete_matching')
-    
-
     return tweet_df
 
 
 if __name__ == "__main__":
-    tag = "#ธรรมศาสตร์ช้างเผือก"
-    scrape_tag(tag, 60)
+    tag = "#DSI321"
+    df=  scrape_tag(tag, 1)
+    # df.to_csv(file_dir / f"tweets_{tag}.csv", index=False)
     
 
